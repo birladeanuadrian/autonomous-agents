@@ -30,9 +30,10 @@ These domains are included in the notebook allowlist:
 | `registry.npmjs.org` | GET and HEAD on `/**`; POST only on `/-/npm/v1/security/advisories/bulk` |
 | `registry-1.docker.io` | GET and HEAD only on `/v2/**` |
 | `auth.docker.io` | GET and HEAD only on `/token`, with `service=registry.docker.io` |
+| `github.com`, `raw.githubusercontent.com`, `codeload.github.com`, `api.github.com` | GET and HEAD only on `/**` for repository pages, raw files, archives, and API reads |
 | `developer.mozilla.org` | JavaScript and web platform documentation |
 
-Package and image registries provide executable code. Downloads may require additional redirect or content delivery hosts; review blocked destinations before adding exceptions. GitHub remains unavailable to sub-agents.
+Package and image registries provide executable code. Downloads may require additional redirect or content delivery hosts; review blocked destinations before adding exceptions. GitHub permits reads on all paths at the four explicit hosts above; other GitHub subdomains, GitHub Pages, and asset hosts are not enabled. SSH remains blocked. These reads include source code and archives, not just documentation. Downloaded code can access worker files and approved network destinations; review delivered bundles before integration.
 
 Package registries and Docker Hub use HTTP method and path rules rather than whole-host access. GET and HEAD support image reads and existence checks; normal upload and deletion methods are excluded. URLs and headers still carry data, so read methods are not a complete guarantee against data leakage. Documentation and OpenAI domains retain whole-host HTTPS access. Normal npm publishing is blocked. A POST exception permits npm audit submissions, which normally include package names and versions. This rule does not validate request bodies; legacy audit fallback endpoints remain blocked.
 
@@ -40,6 +41,6 @@ pip-audit uses the PyPI vulnerability service through version-specific JSON GET 
 
 ## Inherited Codex permissions
 
-Codex kits add their own allow rules. Step 5 inspects the installed kit and applies sandbox-scoped denies for unwanted inherited destinations, including GitHub and common operating-system package mirrors. Extend that deny list to cover every unwanted resource in the actual kit; a static list cannot cover future kit changes.
+Codex kits add their own allow rules. Step 5 inspects the installed kit and applies sandbox-scoped denies for unwanted inherited destinations, including unapproved GitHub hosting domains and common operating-system package mirrors. Extend that deny list to cover every unwanted resource in the actual kit; a static list cannot cover future kit changes.
 
-A whole-host deny overrides kit allows and cannot be reopened by an HTTP allow. Conversely, a kit's broad registry allow can bypass our narrower HTTP allow rules. Conflicting broad registry permissions require a custom kit without those permissions or restrictive organization governance before the documented registry restrictions can be relied upon. Inspect effective policy for every worker.
+A whole-host deny overrides kit allows and cannot be reopened by an HTTP allow. Conversely, a kit's broad GitHub or registry allow can bypass our narrower HTTP allow rules. Conflicting broad GitHub or registry permissions require a custom kit without those permissions or restrictive organization governance before the documented GitHub and registry restrictions can be relied upon. Inspect effective policy for every worker.
