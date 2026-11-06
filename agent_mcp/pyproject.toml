@@ -1,0 +1,6 @@
+[project]
+name = "agent-communication-mcp"
+version = "0.1.0"
+description = "Stdio MCP interface between the master agent and sub-agents"
+requires-python = ">=3.14,<3.15"
+dependencies = ["mcp>=1,<2"]

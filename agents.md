@@ -5,16 +5,16 @@ This repository demonstrates the use of fully isolated, fully autonomous coding 
 # Agent workflow
 
 - Run sub-agents in Docker sandboxes with access limited to a small allowlist of domains.
-- The main agent prepares a dedicated Git worktree for each sub-agent and makes it available to that sub-agent's sandbox.
+- The main agent prepares an independent Git checkout for each sub-agent and copies it into that sub-agent's sandbox.
 - The main agent starts each sub-agent with a specific task and waits for it to finish.
 - Sub-agents operate autonomously in their assigned worktrees. They may read GitHub through approved GET/HEAD requests, including source and archives. GitHub write methods and SSH remain blocked; normal Git smart-HTTP clone/fetch requires POST and is not enabled.
-- Each sub-agent delivers its work as a Git bundle. The main agent receives and reviews the bundle and integrates the work as appropriate.
+- Each sub-agent delivers its work as a readable `worker.patch`. The main agent retrieves and reviews the patch before deciding whether to apply it.
 
 # Setup documentation
 
 - Keep `sandbox-setup.ipynb` as the guided setup walkthrough for someone starting from scratch. Explain each command and its expected outcome; avoid migration instructions for earlier notebook versions.
 - Keep `WHITELISTED_DOMAINS.md` synchronized with the notebook's network rules.
-- Distinguish the intended workflow from implemented functionality. The setup notebook prepares environments; worktree transfer, task orchestration, and bundle retrieval still need implementation.
+- Distinguish the intended workflow from implemented functionality. The setup notebook prepares environments; the MCP server implements task launch, status checks, and delivery retrieval. Patch review and integration remain manual.
 
 # Network enforcement
 
@@ -28,6 +28,6 @@ This repository demonstrates the use of fully isolated, fully autonomous coding 
 
 # Credentials
 
-- Configure Codex authentication on the host using Docker Sandboxes' credential management. Keep real credentials out of sandbox files, Git bundles, and saved templates.
+- Configure Codex authentication on the host using Docker Sandboxes' credential management. Keep real credentials out of sandbox files, Git patches, and saved templates.
 - Document Docker sign-in and OpenAI authentication as separate steps. Explain global versus sandbox-scoped credentials when showing setup commands.
 - Docker manages OAuth token refresh on the host. Do not promise a fixed session lifetime; authentication failures may require renewed host-side sign-in.

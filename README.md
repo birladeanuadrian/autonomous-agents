@@ -1,12 +1,17 @@
 # Autonomous coding agents
 
-This repository demonstrates autonomous coding agents running in isolated Docker sandboxes, with limited network access and Git bundles for delivering their work.
+This repository demonstrates autonomous coding agents running in isolated Docker sandboxes, with limited network access and readable Git patches for delivering their work.
 
 Start with [sandbox-setup.ipynb](sandbox-setup.ipynb). The notebook introduces Docker Sandboxes from scratch and walks through installation, locked-down networking, the domain allowlist, policy checks, saving a template, reuse, and cleanup. Open it in PyCharm, Jupyter, or a notebook viewer and copy the command blocks into a host Bash terminal as you read. No Python kernel is required.
 
-The setup walkthrough prepares the environment. Git worktree transfer, task execution, and bundle retrieval will be covered separately.
+The setup walkthrough prepares the environment. The MCP server implements worker
+preparation, task launch, and delivery retrieval; integration remains manual.
 
 See [WHITELISTED_DOMAINS.md](WHITELISTED_DOMAINS.md) for approved domains and proposed additions.
+
+The [agent communication MCP server](agent_mcp/README.md) is a separate Python
+stdio server that starts tasks in isolated workers using the saved template.
+Status and result tools report progress and retrieve delivery files to the host.
 
 ## Mini Jira
 
