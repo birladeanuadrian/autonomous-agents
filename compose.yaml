@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:18.1
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mini_jira}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mini_jira_local}
+      POSTGRES_DB: ${POSTGRES_DB:-mini_jira}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  test-db:
+    image: postgres:18.1
+    profiles: [test]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mini_jira}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mini_jira_local}
+      POSTGRES_DB: mini_jira_test
+    ports:
+      - "127.0.0.1:${TEST_DB_PORT:-5433}:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  postgres_data:
