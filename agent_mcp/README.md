@@ -1,7 +1,8 @@
 # Agent communication MCP server
 
 A standalone Python server using the official MCP SDK, separate from Mini Jira.
-It exposes `start_task`, `get_task_status`, and `get_task_result` over stdio.
+It exposes `start_task`, `get_task_status`, `get_task_result`, `list_executions`,
+and `cleanup_execution` over stdio.
 `start_task(task: TaskRequest) -> Task` accepts a dataclass containing `task: str`
 and `model: str`, both required and nonempty. The selected model is passed to
 Codex and saved in task metadata. Over MCP, call it with
@@ -27,6 +28,24 @@ Pass the handle to status/result tools as `{"task": {"task_id": "<ID>", "pid": 1
 The supplied ID and PID must match the saved task record. No global process
 registry is used; the background watcher only retains its own process reference
 and writes its exit result atomically to disk.
+
+`list_executions() -> list[ExecutionSummary]` lists saved executions, including
+their PID, state, liveness, sandbox, cleanup completion, and any error. Failed
+setups may have no PID; corrupt records are listed with an error.
+
+`cleanup_execution(task: Task | str, delete_artifacts: bool = False) -> CleanupResult`
+accepts a task handle or task ID (including failed setups without a PID).
+It refuses active/preparing tasks and tasks collecting outputs, retrieves
+delivery files, removes only that task's sandbox, and deletes its `checkout/`.
+Legacy `worktree/` directories are removed through `git worktree remove`.
+Delivery retrieval failures stop cleanup before sandbox removal. Progress and
+errors are saved in `task.json` so a retry resumes completed steps. Cleanup and
+the completion watcher share a per-execution file lock.
+
+By default, `task.json`, `prompt.txt`, `agent.log`, and `delivery/` remain for
+review. Set `delete_artifacts` to `true` to delete the entire execution directory
+after resource cleanup. This is permanent. No automatic retention policy runs.
+The tools do not apply patches or merge changes.
 
 States are `launched` while the server monitors the process, `collecting` while
 delivery files are copied to the host, `completed` for
@@ -67,7 +86,7 @@ are still reported.
 Task directories contain `task.json`, `prompt.txt`, and `agent.log`.
 Treat these as private: prompts and agent output may be sensitive.
 They and the independent checkout are retained on failure for inspection; a created
-sandbox is stopped if setup fails. No task resources are automatically deleted.
+sandbox is stopped if setup fails. Resources are deleted only by explicit cleanup.
 `launched` means the host process was started, not that Codex completed or
 authenticated successfully; poll `get_task_status` and inspect `agent.log`.
 Delivery artifacts are written to `$HOME/executions/<task_id>/delivery` inside

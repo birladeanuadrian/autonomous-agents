@@ -54,7 +54,4 @@ async def main(model: str, reasoning_effort: str | None = None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", required=True, help="Codex model to use for the worker")
-    parser.add_argument("--reasoning-effort", help="Thinking level supported by the selected model")
-    args = parser.parse_args()
-    asyncio.run(main(args.model, args.reasoning_effort))
+    asyncio.run(main("gpt-6.1-terra", "medium"))

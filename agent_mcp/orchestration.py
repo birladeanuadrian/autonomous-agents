@@ -1,5 +1,6 @@
 """Host-side task preparation; worker checkouts never reference host Git metadata."""
 
+import fcntl
 import json
 import os
 import re
@@ -10,7 +11,7 @@ import uuid
 from pathlib import Path, PurePosixPath
 from subprocess import Popen
 
-from task import Task, TaskRequest, TaskResult
+from task import CleanupResult, ExecutionSummary, Task, TaskRequest, TaskResult
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 TEMPLATE = "autonomous-agent:v1"
@@ -29,6 +30,20 @@ def save_record(record: Path, metadata: dict) -> None:
 def watch_task(process: Popen, record: Path, metadata: dict) -> None:
     try:
         exit_code = process.wait()
+    except Exception as error:
+        metadata.update(state="unknown", error=f"Process monitoring failed: {error}")
+        save_record(record, metadata)
+        return
+    try:
+        lock = (record.parent / ".cleanup.lock").open("a")
+    except FileNotFoundError:
+        return  # A completed cleanup may already have deleted the execution.
+    with lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not record.parent.exists():
+            return
+        if record.exists() and json.loads(record.read_text()).get("cleanup", {}).get("completed"):
+            return
         metadata.update(state="collecting", exit_code=exit_code)
         save_record(record, metadata)
         try:
@@ -36,9 +51,7 @@ def watch_task(process: Popen, record: Path, metadata: dict) -> None:
         except Exception as error:
             metadata["delivery_error"] = str(error)
         metadata.update(state="completed" if exit_code == 0 else "failed", exit_code=exit_code)
-    except Exception as error:
-        metadata.update(state="unknown", error=f"Process monitoring failed: {error}")
-    save_record(record, metadata)
+        save_record(record, metadata)
 
 
 def collect_delivery(record: Path, metadata: dict) -> Path:
@@ -143,6 +156,101 @@ def configure_network(name: str) -> None:
     script = match[1]
     # Host policy and inherited kit permissions are trusted, not audited at launch.
     run("bash", "-e", "-c", script + '\napply_network_rules "$1"', "network", name)
+
+
+def executions() -> list[ExecutionSummary]:
+    summaries = []
+    root = REPOSITORY / "executions"
+    if not root.exists():
+        return summaries
+    for directory in sorted(root.iterdir()):
+        if directory.is_symlink() or not directory.is_dir() or not re.fullmatch(r"[0-9a-f]{32}", directory.name):
+            continue
+        try:
+            metadata = json.loads((directory / "task.json").read_text())
+            if metadata.get("id") != directory.name:
+                raise ValueError("Record ID does not match directory")
+            pid = metadata.get("pid")
+            running = pid_running(pid) if pid else False
+            state = metadata["state"]
+            if state in {"launched", "unknown"} and not running:
+                state = "failed"
+            summaries.append(ExecutionSummary(
+                task_id=directory.name, pid=pid, state=state, running=running,
+                sandbox=metadata.get("sandbox"),
+                cleaned=metadata.get("cleanup", {}).get("completed", False),
+                error=metadata.get("cleanup", {}).get("error") or metadata.get("error"),
+            ))
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            summaries.append(ExecutionSummary(directory.name, None, "unknown", False, None, False, str(error)))
+    return summaries
+
+
+def cleanup(task: Task | str, delete_artifacts: bool = False) -> CleanupResult:
+    task_id = task.task_id if isinstance(task, Task) else task
+    if not re.fullmatch(r"[0-9a-f]{32}", task_id):
+        raise ValueError("Invalid task ID")
+    directory = REPOSITORY / "executions" / task_id
+    if directory.is_symlink():
+        raise ValueError("Execution directory must not be a symbolic link")
+    record = directory / "task.json"
+    if not record.is_file():
+        raise ValueError(f"Unknown task ID: {task_id}")
+    # Prevent concurrent cleanup requests from deleting resources twice.
+    with (directory / ".cleanup.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("Cleanup is already in progress") from None
+        metadata = json.loads(record.read_text())
+        if metadata.get("id") != task_id:
+            raise ValueError("Task ID does not match its record")
+        if isinstance(task, Task) and metadata.get("pid") != task.pid:
+            raise ValueError("Task handle does not match its saved ID and PID")
+        if metadata["state"] in {"preparing", "collecting"} or (
+            metadata.get("pid") and pid_running(metadata["pid"])
+        ):
+            raise ValueError("Cannot clean an active task or one collecting outputs")
+        progress = metadata.setdefault("cleanup", {})
+        try:
+            if not progress.get("sandbox_removed"):
+                sandbox = metadata.get("sandbox")
+                if sandbox and sandbox != f"agent-{task_id}":
+                    raise ValueError("Unexpected sandbox name in task record")
+                if metadata.get("pid") and metadata.get("delivery_directory"):
+                    collect_delivery(record, metadata)
+                if sandbox:
+                    try:
+                        sbx("rm", "--force", sandbox)
+                    except RuntimeError as error:
+                        if not re.search(r"sandbox[^\n]*(?:not found|does not exist)|no such sandbox", str(error).lower()):
+                            raise
+                progress["sandbox_removed"] = True
+                save_record(record, metadata)
+            if not progress.get("checkout_removed"):
+                worktree = directory / "worktree"
+                if worktree.exists():
+                    run("git", "worktree", "remove", "--force", str(worktree), cwd=REPOSITORY)
+                checkout = directory / "checkout"
+                if checkout.is_symlink():
+                    checkout.unlink()
+                elif checkout.exists():
+                    shutil.rmtree(checkout)
+                progress["checkout_removed"] = True
+                save_record(record, metadata)
+            progress.update(completed=True)
+            progress.pop("error", None)
+            save_record(record, metadata)
+            delivery = directory / "delivery"
+            local_delivery = str(delivery) if delivery.is_dir() and not delete_artifacts else None
+            if delete_artifacts:
+                shutil.rmtree(directory)
+            return CleanupResult(task_id, True, True, delete_artifacts, local_delivery)
+        except Exception as error:
+            progress["error"] = str(error)
+            if directory.exists():
+                save_record(record, metadata)
+            raise
 
 
 def start(task: TaskRequest) -> Task:

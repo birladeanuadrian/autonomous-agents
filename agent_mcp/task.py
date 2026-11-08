@@ -39,3 +39,23 @@ class TaskResult:
     files: list[str]
     patch_file: str | None
     report_file: str | None
+
+
+@dataclass(frozen=True)
+class ExecutionSummary:
+    task_id: str
+    pid: int | None
+    state: str
+    running: bool
+    sandbox: str | None
+    cleaned: bool
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class CleanupResult:
+    task_id: str
+    sandbox_removed: bool
+    checkout_removed: bool
+    artifacts_deleted: bool
+    delivery_directory: str | None
