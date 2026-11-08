@@ -34,6 +34,7 @@ These domains are included in the notebook allowlist:
 | `registry.npmjs.org` | GET and HEAD on `/**`; POST only on `/-/npm/v1/security/advisories/bulk` |
 | `registry-1.docker.io` | GET and HEAD only on `/v2/**` |
 | `auth.docker.io` | GET and HEAD only on `/token`, with `service=registry.docker.io` |
+| `production.cloudfront.docker.com` | GET and HEAD only on `/registry-v2/docker/registry/v2/blobs/sha256/**` for Docker image layers |
 | `github.com`, `raw.githubusercontent.com`, `codeload.github.com`, `api.github.com` | GET and HEAD only on `/**` for repository pages, raw files, archives, and API reads |
 | `developer.mozilla.org` | JavaScript and web platform documentation |
 | `cdn.playwright.dev`, `playwright.download.prss.microsoft.com` | GET/HEAD over HTTPS on `/**` for Playwright's matching Chromium and browser-support archives |
@@ -55,4 +56,6 @@ These method denies cover the standard non-read methods, not arbitrary extension
 
 Codex kits add their own allow rules. Step 5 inspects the installed kit and applies sandbox-scoped denies for unwanted inherited destinations, including unapproved GitHub hosting domains and common operating-system package mirrors. Extend that deny list to cover every unwanted resource in the actual kit; a static list cannot cover future kit changes.
 
-A whole-host deny overrides kit allows and cannot be reopened by an HTTP allow. Conversely, a kit's broad GitHub or registry allow can bypass our narrower HTTP allow rules. Conflicting broad GitHub or registry permissions require a custom kit without those permissions or restrictive organization governance before the documented GitHub and registry restrictions can be relied upon. Inspect effective policy for every worker.
+A whole-host deny overrides kit allows and cannot be reopened by an HTTP allow. Conversely, a kit's broad GitHub, registry or Docker CDN allow can bypass our narrower HTTP allow rules. Conflicting broad GitHub, registry or Docker CDN permissions require a custom kit without those permissions or restrictive organization governance before the documented GitHub and registry restrictions can be relied upon. Inspect effective policy for every worker.
+
+The PostgreSQL image pull must be tested as an actual download in each sandbox. Docker Hub may redirect layer GETs to additional CDN hosts outside the rules above; a successful registry policy probe does not establish download access. Record the blocked host, method, path and response for host review. Only the Docker image-layer CDN path listed above is approved; review any other endpoint separately. See Docker’s [allow list](https://docs.docker.com/desktop/enterprise/allow-list/).

@@ -94,8 +94,7 @@ the sandbox, then automatically copied to `executions/<task_id>/delivery/` on
 the host when the worker exits. No host directory is mounted. Copy failures
 are recorded as `delivery_error`; `get_task_result` retries retrieval, including
 for tasks completed before automatic retrieval was implemented. `run_mcp.py`
-calls it after polling finishes. Patch review and integration are still manual. Database provisioning is also
-still separate from this launch operation.
+calls it after polling finishes. Patch review and integration are still manual. The server provisions no database: each worker starts and owns its development and test PostgreSQL containers in its own private sandbox Docker Engine when its assignment needs them. API and frontend run directly in that sandbox; see the repository README and worker instructions for readiness, tests, and cleanup.
 
 Workers deliver `worker.patch`, a readable unified diff from the supplied
 `worker_base` to the worker's final commit. It excludes the setup commit and

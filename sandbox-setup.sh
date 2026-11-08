@@ -206,11 +206,13 @@ apply_network_rules() {
   for domain in cdn.playwright.dev playwright.download.prss.microsoft.com; do
     sbx policy allow network --sandbox "$target_sandbox" "$domain:443" --method GET,HEAD --path '/**'
   done
+
   # Chrome for Testing redirects stay restricted to its public bucket.
   sbx policy allow network --sandbox "$target_sandbox" storage.googleapis.com:443 --method GET,HEAD --path '/chrome-for-testing-public/**'
 
   sbx policy allow network --sandbox "$target_sandbox" registry-1.docker.io:443 --method GET,HEAD --path '/v2/**'
   sbx policy allow network --sandbox "$target_sandbox" auth.docker.io:443 --method GET,HEAD --path '/token' --query 'service=registry.docker.io'
+  sbx policy allow network --sandbox "$target_sandbox" production.cloudfront.docker.com:443 --method GET,HEAD --path '/registry-v2/docker/registry/v2/blobs/sha256/**'
 }
 
 if [ "${#extra_denies[@]}" -gt 0 ]; then
@@ -220,7 +222,7 @@ fi
 inspect_and_apply_policy() {
   local target=$1
   sbx policy ls "$target" --source kit --decision allow --wide
-  confirm "Review $target inherited kit permissions against WHITELISTED_DOMAINS.md. Every unwanted host must be in the deny list (extend with --deny-host). Conflicting broad GitHub/registry/browser-host permissions require a custom kit or organization policy; narrow allows cannot constrain them. Stop if unresolved."
+  confirm "Review $target inherited kit permissions against WHITELISTED_DOMAINS.md. Every unwanted host must be in the deny list (extend with --deny-host). Conflicting broad GitHub/registry/CDN/browser-host permissions require a custom kit or organization policy; narrow allows cannot constrain them. Stop if unresolved."
   apply_network_rules "$target"
   sbx policy ls "$target" --wide
   confirm "Review the COMPLETE effective policy for $target. Confirm no unapproved inherited/global permissions or conflicting broad allows remain. Spot checks alone do not establish this."
@@ -266,6 +268,9 @@ verify_policy() {
   check_http "$target" denied GET https://storage.googleapis.com/unapproved-bucket/policy-probe
   check_http "$target" allowed POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk
   check_http "$target" allowed HEAD https://registry-1.docker.io/v2/library/ubuntu/manifests/latest
+  for method in GET HEAD; do check_http "$target" allowed "$method" https://production.cloudfront.docker.com/registry-v2/docker/registry/v2/blobs/sha256/ab/example/data; done
+  check_http "$target" denied POST https://production.cloudfront.docker.com/registry-v2/docker/registry/v2/blobs/sha256/ab/example/data
+  check_http "$target" denied GET https://production.cloudfront.docker.com/unapproved-path
   check_http "$target" denied POST https://cdn.playwright.dev/
   check_http "$target" denied POST https://registry-1.docker.io/v2/library/ubuntu/blobs/uploads/
   check_http "$target" denied GET https://pypi.org/pypi/requests/json
@@ -416,6 +421,69 @@ sbx exec "$sandbox_name" bash -c "$browser_setup"
 unset browser_setup
 
 
+# Check the private engine and actual image download after policy review. The
+# check uses only temporary databases; no runtime state is saved in the template.
+IFS= read -r -d '' stack_check <<'SANDBOX_STACK_CHECK' || true
+set -euo pipefail
+# Run in a fresh, dedicated sandbox with its own Docker Engine.
+# Inspect the endpoint and server identity: they must be private to this sandbox.
+docker context show
+docker context inspect
+docker version
+docker info --format 'Name={{.Name}} Root={{.DockerRootDir}}'
+docker compose version
+# This must download the pinned image under the effective policy, not just probe it.
+docker pull postgres:18.1
+check_dir=$(mktemp -d)
+cleanup_stack_check() {
+  docker compose -p mini-jira-template-check -f "$check_dir/compose.yaml" down --volumes --remove-orphans
+  rm -rf "$check_dir"
+}
+trap cleanup_stack_check EXIT
+cat > "$check_dir/compose.yaml" <<'COMPOSE'
+services:
+  db:
+    image: postgres:18.1
+    environment:
+      POSTGRES_USER: check
+      POSTGRES_PASSWORD: disposable-check
+      POSTGRES_DB: check
+    tmpfs: [/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U check -d check"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  test-db:
+    image: postgres:18.1
+    environment:
+      POSTGRES_USER: check
+      POSTGRES_PASSWORD: disposable-check
+      POSTGRES_DB: check_test
+    tmpfs: [/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U check -d check_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+COMPOSE
+docker compose -p mini-jira-template-check -f "$check_dir/compose.yaml" up -d --wait
+docker compose -p mini-jira-template-check -f "$check_dir/compose.yaml" ps
+cleanup_stack_check
+trap - EXIT
+# The dedicated template-check engine must not carry image or database state forward.
+docker image rm postgres:18.1
+SANDBOX_STACK_CHECK
+sbx exec "$sandbox_name" docker context inspect
+sbx exec "$sandbox_name" docker info --format 'Name={{.Name}} Root={{.DockerRootDir}}'
+confirm "Confirm this engine is private to $sandbox_name and dedicated to this check before pulling and removing the image."
+sbx exec "$sandbox_name" bash -c "$stack_check"
+
+# Inspect before save: stop if any runtime container, volume, or credential remains.
+sbx exec "$sandbox_name" docker ps -a
+sbx exec "$sandbox_name" docker volume ls
+confirm "Confirm the template contains no runtime containers, database volumes, .env files, or credentials."
+
 # Global host credential: do not embed credentials in sandbox files or templates.
 case "$auth_method" in
   oauth) sbx secret set openai --oauth ;;
@@ -435,6 +503,11 @@ sbx create --name "$worker_name" --pull never --template "$template_name" --skil
 inspect_and_apply_policy "$worker_name"
 verify_policy "$worker_name"
 verify_requests "$worker_name"
+sbx exec "$worker_name" docker context inspect
+sbx exec "$worker_name" docker info --format 'Name={{.Name}} Root={{.DockerRootDir}}'
+confirm "Confirm this engine is private to $worker_name and dedicated to this check before pulling and removing the image."
+sbx exec "$worker_name" bash -c "$stack_check"
+unset stack_check
 sbx exec "$worker_name" node --version
 sbx exec "$worker_name" npm --version
 sbx exec "$worker_name" python3.14 --version
