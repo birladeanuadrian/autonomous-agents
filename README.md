@@ -74,7 +74,21 @@ curl -sS -X PATCH "http://localhost:8000/api/v1/issues/$ISSUE_ID" \
 curl -sS "http://localhost:8000/api/v1/projects/$PROJECT_ID/issues?status=done"
 ```
 
-Creation returns HTTP 201. Status changes return HTTP 200 and update `updated_at`; omitted fields remain unchanged. Duplicate project keys return 409, missing resources return 404, and invalid requests return 422. The initial version has no authentication or frontend; use it as a local exercise.
+Creation returns HTTP 201. Status changes return HTTP 200 and update `updated_at`; omitted fields remain unchanged. Duplicate project keys return 409, missing resources return 404, and invalid requests return 422. The application has no authentication; use it as a local exercise.
+
+### Frontend
+
+With the API and database running as described above, install Node.js 20.19+ or 22.12+ and start the frontend in a second terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite (normally http://localhost:5173). Vite proxies same-origin `/api` requests to `http://127.0.0.1:8000`; set `VITE_API_PROXY_TARGET` when starting Vite to use a different FastAPI address. The UI supports project creation and navigation, issue creation and editing, all status transitions, and status filtering. Names and titles are trimmed; descriptions retain whitespace. Project keys must be 2–10 uppercase letters. The interface displays API validation, conflict, and missing-resource errors.
+
+Run `npm test` for mocked API interaction tests and `npm run build` for TypeScript checking and a production build. Serve `frontend/dist` with a web server and configure that same origin to reverse proxy `/api/` to FastAPI, preserving the path. Vite's development proxy does not apply to production hosting. The frontend never calls `/health`.
 
 ### Configuration
 

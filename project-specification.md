@@ -17,7 +17,7 @@ The first version supports:
 - Running the API directly with Python and PostgreSQL with Docker Compose.
 - Applying database migrations, loading sample data, and running integration tests.
 
-The first version has no frontend, authentication, users, assignees, permissions, comments, priorities, attachments, sprints, notifications, or external integrations. FastAPI's interactive documentation is the initial interface. These features can become later agent tasks.
+The application includes a React frontend for projects, issues, status transitions, and filtering. It has no authentication, users, assignees, permissions, comments, priorities, attachments, sprints, notifications, or external integrations.
 
 ## Technology
 
@@ -26,7 +26,7 @@ The first version has no frontend, authentication, users, assignees, permissions
 - Psycopg for the PostgreSQL driver.
 - Alembic for schema migrations.
 - PostgreSQL as the application and integration-test database.
-- pytest for tests.
+- pytest for API tests; React, TypeScript, Vite, and Vitest for the frontend.
 - Docker Compose for development and test PostgreSQL services.
 
 Choose supported versions during implementation, declare the Python version, pin container image versions, and commit a dependency lock file. Keep the application as a single service with a small, conventional package structure.
@@ -138,7 +138,7 @@ The initial implementation is complete when:
 - Migrations build the schema from an empty database, and the seed command is repeatable.
 - The README contains the commands and expected outcomes needed to reproduce these checks.
 
-Keep testing focused on observable behavior and database guarantees. A separate frontend, deployment pipeline, and performance benchmark suite are unnecessary for this version.
+Keep testing focused on observable behavior and database guarantees. A deployment pipeline and performance benchmark suite are outside this version.
 
 ## Follow-up tasks for autonomous agents
 

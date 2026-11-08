@@ -10,8 +10,12 @@ Docker sandboxes for sub-agents should permit outbound access only to the domain
 | `platform.openai.com` | OpenAI API documentation and platform |
 | `api.openai.com` | OpenAI API |
 | `chatgpt.com` and `www.chatgpt.com` | Codex subscription-based model access |
+| `ab.chatgpt.com` | Explicitly approved HTTPS endpoint; its precise runtime purpose has not been established |
+| `deb.debian.org` | Debian package access; whole-host access on HTTP port 80 and HTTPS port 443 |
+| `dhi.io` | Package repository configured in the sandbox at `/deb/debian/main`; whole-host access on HTTP port 80 and HTTPS port 443 |
 | `docs.python.org` | Python documentation |
-| `nodejs.org` | Node.js documentation |
+| `www.python.org` | Official Python source archives for pre-installing Python 3.14; HTTPS port 443 |
+| `nodejs.org` | Node.js documentation, official Node.js 24 binary archives, and release checksums |
 | `dev.mysql.com` | MySQL documentation |
 | `mongodb.com` | MongoDB documentation website |
 | `www.mongodb.com` | MongoDB documentation |
@@ -32,14 +36,22 @@ These domains are included in the notebook allowlist:
 | `auth.docker.io` | GET and HEAD only on `/token`, with `service=registry.docker.io` |
 | `github.com`, `raw.githubusercontent.com`, `codeload.github.com`, `api.github.com` | GET and HEAD only on `/**` for repository pages, raw files, archives, and API reads |
 | `developer.mozilla.org` | JavaScript and web platform documentation |
+| `cdn.playwright.dev`, `playwright.download.prss.microsoft.com` | GET/HEAD over HTTPS on `/**` for Playwright's matching Chromium and browser-support archives |
+| `storage.googleapis.com` | GET/HEAD over HTTPS only on `/chrome-for-testing-public/**` for Chrome for Testing archives reached by Playwright redirects; other buckets and upload methods remain excluded |
 
 Package and image registries provide executable code. Downloads may require additional redirect or content delivery hosts; review blocked destinations before adding exceptions. GitHub permits reads on all paths at the four explicit hosts above; other GitHub subdomains, GitHub Pages, and asset hosts are not enabled. SSH remains blocked. These reads include source code and archives, not just documentation. Downloaded code can access worker files and approved network destinations; review delivered patches before integration.
+
+Notebook chapter 5 configures browser-download permissions; chapter 6 installs Playwright, its matching Chromium binaries, and Linux dependencies into the source template. Chrome for Testing redirects to `storage.googleapis.com` are restricted to the `/chrome-for-testing-public/**` bucket path. Browser redirects to other hosts remain blocked until reviewed and explicitly approved. Browser download hosts use HTTP method rules, not whole-host access; inherited broad allows must still be inspected, including any broad Google Storage permission.
 
 Package registries and Docker Hub use HTTP method and path rules rather than whole-host access. GET and HEAD support image reads and existence checks; normal upload and deletion methods are excluded. URLs and headers still carry data, so read methods are not a complete guarantee against data leakage. Documentation and OpenAI domains retain whole-host HTTPS access. Normal npm publishing is blocked. A POST exception permits npm audit submissions, which normally include package names and versions. This rule does not validate request bodies; legacy audit fallback endpoints remain blocked.
 
 pip-audit uses the PyPI vulnerability service through version-specific JSON GET requests. Package names and versions appear in the requested URLs. OSV and GitHub access are not required for this mode. See [pip-audit](https://pypi.org/project/pip-audit/).
 
 ## Inherited Codex permissions
+
+The notebook explicitly denies HTTP POST, PUT, PATCH, DELETE, OPTIONS, TRACE, and CONNECT on `github.com:443`, `raw.githubusercontent.com:443`, `codeload.github.com:443`, and `api.github.com:443`, and allows GET/HEAD on those hosts. The method denies override inherited allows for those methods while preserving approved reads. Do not add these four HTTPS hosts to the whole-host deny list: that would block GET/HEAD too. GitHub SSH is denied separately.
+
+These method denies cover the standard non-read methods, not arbitrary extension methods or non-HTTP transports. They do not replace the requirement to remove conflicting whole-host allows before claiming a strict GET/HEAD-only policy. The notebook checks GET/HEAD and every explicitly denied method on all four hosts and stops on unexpected decisions.
 
 Codex kits add their own allow rules. Step 5 inspects the installed kit and applies sandbox-scoped denies for unwanted inherited destinations, including unapproved GitHub hosting domains and common operating-system package mirrors. Extend that deny list to cover every unwanted resource in the actual kit; a static list cannot cover future kit changes.
 

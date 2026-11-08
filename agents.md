@@ -19,6 +19,7 @@ Plan approval authorizes sandboxed implementation of the approved scope. Applyin
 # Agent workflow
 
 - Run sub-agents in Docker sandboxes with access limited to a small allowlist of domains.
+- Prefer `gpt-6.1-terra` as the model when launching autonomous sub-agents through the MCP server, unless the user or task instructions explicitly specify another model.
 - The main agent prepares an independent Git checkout for each sub-agent and copies it into that sub-agent's sandbox.
 - The main agent starts each sub-agent with a specific task and waits for it to finish.
 - Sub-agents operate autonomously in their assigned worktrees. They may read GitHub through approved GET/HEAD requests, including source and archives. GitHub write methods and SSH remain blocked; normal Git smart-HTTP clone/fetch requires POST and is not enabled.
@@ -28,6 +29,7 @@ Plan approval authorizes sandboxed implementation of the approved scope. Applyin
 # Setup documentation
 
 - Keep `sandbox-setup.ipynb` as the guided setup walkthrough for someone starting from scratch. Explain each command and its expected outcome; avoid migration instructions for earlier notebook versions.
+- Whenever `sandbox-setup.ipynb` is updated, enact the corresponding updates in `sandbox-setup.sh` in the same change so the script stays synchronized with the notebook.
 - Keep `WHITELISTED_DOMAINS.md` synchronized with the notebook's network rules.
 - Distinguish the intended workflow from implemented functionality. The setup notebook prepares environments; the MCP server implements task launch, status checks, and delivery retrieval. Patch review and integration remain manual.
 
